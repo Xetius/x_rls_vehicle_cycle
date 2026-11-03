@@ -1,0 +1,11 @@
+{
+  "vehicleCycleUseModel": {"cat":"gameplay", "order":900, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.useModel()", "title":"Vehicle cycler: cycle this model", "desc":"Cycle every config of the model of the vehicle you're in"},
+  "vehicleCycleNext": {"cat":"gameplay", "order":901, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.next()", "title":"Vehicle cycler: next config", "desc":"Spawn the next config"},
+  "vehicleCyclePrev": {"cat":"gameplay", "order":902, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.prev()", "title":"Vehicle cycler: previous config", "desc":"Spawn the previous config"},
+  "vehicleCycleSetSpot": {"cat":"gameplay", "order":903, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.setSpot()", "title":"Vehicle cycler: set spawn spot", "desc":"Spawn spot = 10 m ahead of the vehicle you're in"},
+  "vehicleCycleCurrent": {"cat":"gameplay", "order":904, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.current()", "title":"Vehicle cycler: show current config", "desc":"Show which config is spawned"},
+  "vehicleCycleLog": {"cat":"gameplay", "order":905, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.logCurrent()", "title":"Vehicle cycler: log current config to file", "desc":"Append the spawned config to vehicleCycle_flagged.txt"},
+  "vehicleCycleToggleSource": {"cat":"gameplay", "order":906, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.toggleSource()", "title":"Vehicle cycler: switch flagged list / all configs", "desc":"Cycle only the configs in vehicleCycle_flagged.txt, or go back to all configs of the model"},
+  "vehicleCycleScan": {"cat":"gameplay", "order":907, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.scan()", "title":"Vehicle cycler: scan seats", "desc":"Spawn every config in the active list and write seat problems to vehicleCycle_seats.txt"},
+  "vehicleCycleStopScan": {"cat":"gameplay", "order":908, "ctx":"tlua", "onDown":"extensions.load('vehicleCycle') vehicleCycle.stopScan()", "title":"Vehicle cycler: stop seat scan", "desc":"Stop a running seat scan"}
+}
