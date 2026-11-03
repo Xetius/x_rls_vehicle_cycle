@@ -293,8 +293,25 @@ local function checkSeats(e, id)
     if slot.defaultPermissionMode == 'driver' then hasDriver = true end
   end
   table.sort(seatIds)
-  local status = #seatIds == 0 and (seatlessReason(vehData) or 'UNSEATED') or (not hasDriver and 'NO_DRIVER_SEAT') or 'OK'
-  return status, {e.model, e.key, tr(info.Name), tostring(info.Source), status, #seatIds, table.concat(seatIds, ','), seatParts(vehData)}
+  -- 0.40 makes each seat's in-car camera from its occupant (cameras.occupant[seatId]). A pre-0.40 'dash'
+  -- or 'driver' camera left on a part is turned into a separate, seatless 'driver' (cameras.driver).
+  local cams = vehData.vdata.cameras or {}
+  local occupantCams, noCam = cams.occupant or {}, {}
+  for _, seatId in ipairs(seatIds) do
+    if not occupantCams[seatId] then table.insert(noCam, seatId) end
+  end
+  local camInfo = {}
+  if #noCam > 0 then table.insert(camInfo, 'no camera: ' .. table.concat(noCam, ',')) end
+  if cams.driver then table.insert(camInfo, 'legacy driver camera') end
+
+  local status
+  if #seatIds == 0 then status = seatlessReason(vehData) or 'UNSEATED'
+  elseif #noCam > 0 then status = 'NO_SEAT_CAMERA'
+  elseif cams.driver then status = 'LEGACY_DRIVER_CAMERA'
+  elseif not hasDriver then status = 'NO_DRIVER_SEAT'
+  else status = 'OK' end
+  return status, {e.model, e.key, tr(info.Name), tostring(info.Source), status, #seatIds, table.concat(seatIds, ','),
+    table.concat(camInfo, '; '), seatParts(vehData)}
 end
 
 local function writeScanRow(row)
@@ -322,7 +339,7 @@ local function startScan()
   local f = io.open(scanFile, 'w')
   if not f then message('vehicleCycle: unable to write ' .. scanFile) return end
   f:write(string.format('# seat scan %s, %d configs from %s\n', os.date('%Y-%m-%d %H:%M:%S'), #entries, sourceFile or table.concat(models, ', ')))
-  f:write('# model\tkey\tname\tsource\tstatus\tseat count\tseat ids\tinterior/dash/seat parts [mod]\n')
+  f:write('# model\tkey\tname\tsource\tstatus\tseat count\tseat ids\tcameras\tinterior/dash/seat parts [mod]\n')
   f:close()
   scan = {i = 0, checked = 0, ok = 0, seatless = 0, wait = 0, vehId = nil}
   message(string.format('vehicleCycle: scanning %d configs, stay out of the way of the spawn spot', #entries))
@@ -351,7 +368,7 @@ local function onUpdate(dtReal)
         scan.seatless = scan.seatless + 1
       end
     elseif scan.wait > scanTimeout then
-      row = {e.model, e.key, '', '', 'NO_DATA', 0, '', ''}
+      row = {e.model, e.key, '', '', 'NO_DATA', 0, '', '', ''}
     else
       return
     end
@@ -369,7 +386,7 @@ local function onUpdate(dtReal)
     scan.vehId, scan.wait = veh:getID(), 0
   else
     scan.checked = scan.checked + 1
-    writeScanRow({e.model, e.key, '', '', 'SPAWN_FAILED', 0, '', ''})
+    writeScanRow({e.model, e.key, '', '', 'SPAWN_FAILED', 0, '', '', ''})
   end
 end
 

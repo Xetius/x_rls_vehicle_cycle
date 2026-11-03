@@ -28,9 +28,12 @@ Bindings (Options > Controls > Bindings, Gameplay, search "Vehicle cycler"):
 Seat scan: spawns every config in the active list at the spot without getting in, and reads the
 0.40 occupant seats the game finds for it (the same data it uses to seat you; no seats means you
 get "Unseated"). Problems are written to vehicleCycle_seats.txt in the user folder, tab separated:
-model, key, name, source, status, seat count, seat ids, and the interior/dash/seat parts with the
-mod zip each comes from. Status is one of:
+model, key, name, source, status, seat count, seat ids, camera problems, and the interior/dash/seat
+parts with the mod zip each comes from. Status is one of:
 - UNSEATED: no seats, though the config has a dashboard and doesn't leave its seats empty (a fault)
+- NO_SEAT_CAMERA: a seat has no camera (its occupant doesn't give one)
+- LEGACY_DRIVER_CAMERA: seats are fine, but a pre-0.40 dashboard adds its own driver camera with
+  no seat (0.40 takes the driver camera from the seat occupant)
 - NO_DRIVER_SEAT: seats, but none marked driver
 - SPAWN_FAILED / NO_DATA: the config didn't load
 - NO_INTERIOR: no seats and no dashboard/interior part (trailers, rolling chassis, bare frames)
