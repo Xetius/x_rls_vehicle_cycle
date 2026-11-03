@@ -260,6 +260,29 @@ local function seatParts(vehData)
   return table.concat(found, '; ')
 end
 
+-- Why a config with no seats might be meant that way: trailers, rolling chassis and bare frames have
+-- no dashboard/interior part, and some configs (e.g. Gamers' bed trailers) keep the dashboard but leave
+-- every seat slot empty. Either way the config chose no seats, so it isn't a fault.
+local function seatlessReason(vehData)
+  local hasInterior, seatSlots, filledSeatSlots = false, 0, 0
+  local function walk(node)
+    for _, child in pairs(node and node.children or {}) do
+      local slot, filled = tostring(child.id):lower(), (child.chosenPartName or '') ~= ''
+      if filled and (slot:find('interior$') or slot:find('dash')) then hasInterior = true end
+      if slot:find('seat', 1, true) and not slot:find('^skin_') then
+        seatSlots = seatSlots + 1
+        if filled then filledSeatSlots = filledSeatSlots + 1 end
+      end
+      walk(child)
+    end
+  end
+  walk(vehData.config and vehData.config.partsTree)
+  if not hasInterior then return 'NO_INTERIOR' end
+  if seatSlots > 0 and filledSeatSlots == 0 then return 'NO_SEATS_FITTED' end
+end
+
+local expectedStatus = { OK = true, NO_INTERIOR = true, NO_SEATS_FITTED = true }
+
 local function checkSeats(e, id)
   local info = configInfo(e)
   local vehData = core_vehicle_manager.getVehicleData(id)
@@ -270,7 +293,7 @@ local function checkSeats(e, id)
     if slot.defaultPermissionMode == 'driver' then hasDriver = true end
   end
   table.sort(seatIds)
-  local status = #seatIds == 0 and 'UNSEATED' or (not hasDriver and 'NO_DRIVER_SEAT') or 'OK'
+  local status = #seatIds == 0 and (seatlessReason(vehData) or 'UNSEATED') or (not hasDriver and 'NO_DRIVER_SEAT') or 'OK'
   return status, {e.model, e.key, tr(info.Name), tostring(info.Source), status, #seatIds, table.concat(seatIds, ','), seatParts(vehData)}
 end
 
@@ -285,10 +308,12 @@ local function finishScan(reason)
   scan = nil
   local f = io.open(scanFile, 'a')
   if f then
-    f:write(string.format('# %s: %d checked, %d OK, %d with problems\n', reason, s.checked, s.ok, s.checked - s.ok))
+    f:write(string.format('# %s: %d checked, %d OK, %d with no seats by design, %d with problems\n',
+      reason, s.checked, s.ok, s.seatless, s.checked - s.ok - s.seatless))
     f:close()
   end
-  message(string.format('vehicleCycle: scan %s. %d checked, %d with seat problems, see %s', reason, s.checked, s.checked - s.ok, scanFile))
+  message(string.format('vehicleCycle: scan %s. %d checked, %d with seat problems (%d with no seats by design), see %s',
+    reason, s.checked, s.checked - s.ok - s.seatless, s.seatless, scanFile))
 end
 
 local function startScan()
@@ -299,7 +324,7 @@ local function startScan()
   f:write(string.format('# seat scan %s, %d configs from %s\n', os.date('%Y-%m-%d %H:%M:%S'), #entries, sourceFile or table.concat(models, ', ')))
   f:write('# model\tkey\tname\tsource\tstatus\tseat count\tseat ids\tinterior/dash/seat parts [mod]\n')
   f:close()
-  scan = {i = 0, checked = 0, ok = 0, wait = 0, vehId = nil}
+  scan = {i = 0, checked = 0, ok = 0, seatless = 0, wait = 0, vehId = nil}
   message(string.format('vehicleCycle: scanning %d configs, stay out of the way of the spawn spot', #entries))
 end
 
@@ -318,7 +343,13 @@ local function onUpdate(dtReal)
     if vehData and vehData.vdata then
       local status
       status, row = checkSeats(e, scan.vehId)
-      if status == 'OK' then scan.ok = scan.ok + 1; row = nil end
+      -- OK configs aren't listed; seatless-by-design ones are, but not counted as problems
+      if status == 'OK' then
+        scan.ok = scan.ok + 1
+        row = nil
+      elseif expectedStatus[status] then
+        scan.seatless = scan.seatless + 1
+      end
     elseif scan.wait > scanTimeout then
       row = {e.model, e.key, '', '', 'NO_DATA', 0, '', ''}
     else

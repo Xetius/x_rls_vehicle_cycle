@@ -29,9 +29,14 @@ Seat scan: spawns every config in the active list at the spot without getting in
 0.40 occupant seats the game finds for it (the same data it uses to seat you; no seats means you
 get "Unseated"). Problems are written to vehicleCycle_seats.txt in the user folder, tab separated:
 model, key, name, source, status, seat count, seat ids, and the interior/dash/seat parts with the
-mod zip each comes from. Status is UNSEATED (no seats at all), NO_DRIVER_SEAT (seats, but none
-marked driver), SPAWN_FAILED or NO_DATA. The file is rewritten on each scan and ends with a
-summary line.
+mod zip each comes from. Status is one of:
+- UNSEATED: no seats, though the config has a dashboard and doesn't leave its seats empty (a fault)
+- NO_DRIVER_SEAT: seats, but none marked driver
+- SPAWN_FAILED / NO_DATA: the config didn't load
+- NO_INTERIOR: no seats and no dashboard/interior part (trailers, rolling chassis, bare frames)
+- NO_SEATS_FITTED: no seats because every seat slot is left empty (e.g. Gamers' bed trailers)
+The last two are seatless by design: they're listed but not counted as problems. Configs that
+seat you aren't listed. The file is rewritten on each scan and ends with a summary line.
 
 Console (GE Lua):
   extensions.load('vehicleCycle')
