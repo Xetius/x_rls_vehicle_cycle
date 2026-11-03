@@ -1,7 +1,10 @@
 -- Step through every Gavril D-Series ('pickup') config, one spawned at a time, always at the same spot.
 -- Console:  extensions.load('dsCycle')  then  dsCycle.next() / dsCycle.prev() / dsCycle.go(n) / dsCycle.list() / dsCycle.setSpot() / dsCycle.current() / dsCycle.logCurrent()
 --           dsCycle.useFile([path]) cycles only the configs in a file (default dsCycle_flagged.txt), dsCycle.useAll() goes back to every config
+--           dsCycle.scan() checks the seats of every config in the active list, dsCycle.stopScan() stops it
 local M = {}
+
+local jbeamIO = require('jbeam/io')
 
 local model = 'pickup'
 local spotDistance = 10 -- metres in front of the vehicle you're in when the spot is set
@@ -87,6 +90,21 @@ local function setSpot()
   message(string.format('dsCycle: spawn spot set %dm ahead', spotDistance))
 end
 
+-- replaces the previously spawned vehicle with this config at the spot
+local function spawnKey(key, autoEnter)
+  -- remove the previous one first so it doesn't block the spot
+  local old = vehId and getObjectByID(vehId)
+  if old then old:delete() end
+  vehId = nil
+
+  local veh = core_vehicles.spawnNewVehicle(model, {config = key, pos = spot.pos, rot = spot.rot, autoEnterVehicle = autoEnter})
+  if veh then
+    vehId = veh:getID()
+    spawn.safeTeleport(veh, spot.pos, spot.rot)
+  end
+  return veh
+end
+
 local function go(i)
   if #keys == 0 then refresh() end
   if not spot then setSpot() end
@@ -94,17 +112,7 @@ local function go(i)
   idx = ((i - 1) % #keys) + 1
   local key = keys[idx]
   local info = core_vehicles.getModel(model).configs[key] or {}
-
-  -- remove the previous one first so it doesn't block the spot
-  local old = vehId and getObjectByID(vehId)
-  if old then old:delete() end
-  vehId = nil
-
-  local veh = core_vehicles.spawnNewVehicle(model, {config = key, pos = spot.pos, rot = spot.rot})
-  if veh then
-    vehId = veh:getID()
-    spawn.safeTeleport(veh, spot.pos, spot.rot)
-  end
+  spawnKey(key)
   message(string.format('[%d/%d] %s  (%s, %s)', idx, #keys, key, tostring(info.Name), tostring(info.Source)))
 end
 
@@ -134,6 +142,129 @@ local function logCurrent()
   message(string.format('dsCycle: logged [%d] %s', idx, key))
 end
 
+-- Seat scan: spawns every config in the active list (without getting in) and checks the 0.40
+-- occupant seats the game finds, the same data seatOccupants uses to seat the player.
+-- Problems go to <user folder>/dsCycle_seats.txt with the interior/dash/seat parts and the mod
+-- each one comes from.
+local scanFile = 'dsCycle_seats.txt'
+local scanTimeout = 10 -- seconds to wait for a vehicle's data before giving up on it
+local partPattern = { 'seat', 'interior', 'dash' } -- slots/parts worth reporting
+local scan = nil
+
+local function partSource(ioCtx, partName)
+  local _, filename = jbeamIO.getPart(ioCtx, partName)
+  if not filename then return '?' end
+  local real = FS:getFileRealPath(filename) or filename
+  return real:match('([^/\\]+%.zip)') or (real:find('[/\\]content[/\\]vehicles[/\\]') and 'vanilla') or real
+end
+
+local function seatParts(vehData)
+  local found = {}
+  local function walk(node)
+    for _, child in pairs(node and node.children or {}) do
+      local slot, part = tostring(child.id), child.chosenPartName
+      if part and part ~= '' then
+        for _, p in ipairs(partPattern) do
+          if slot:lower():find(p, 1, true) or part:lower():find(p, 1, true) then
+            table.insert(found, string.format('%s=%s [%s]', slot, part, partSource(vehData.ioCtx, part)))
+            break
+          end
+        end
+      end
+      walk(child)
+    end
+  end
+  walk(vehData.config and vehData.config.partsTree)
+  table.sort(found)
+  return table.concat(found, '; ')
+end
+
+local function checkSeats(key, id)
+  local info = core_vehicles.getModel(model).configs[key] or {}
+  local vehData = core_vehicle_manager.getVehicleData(id)
+  local slots = vehData.vdata.occupantSlotsById or {}
+  local seatIds, hasDriver = {}, false
+  for seatId, slot in pairs(slots) do
+    table.insert(seatIds, seatId)
+    if slot.defaultPermissionMode == 'driver' then hasDriver = true end
+  end
+  table.sort(seatIds)
+  local status = #seatIds == 0 and 'UNSEATED' or (not hasDriver and 'NO_DRIVER_SEAT') or 'OK'
+  return status, {key, tostring(info.Name), tostring(info.Source), status, #seatIds, table.concat(seatIds, ','), seatParts(vehData)}
+end
+
+local function finishScan(reason)
+  M.clear()
+  local s = scan
+  scan = nil
+  local f = io.open(scanFile, 'a')
+  if f then
+    f:write(string.format('# %s: %d checked, %d OK, %d with problems\n', reason, s.checked, s.ok, s.checked - s.ok))
+    f:close()
+  end
+  message(string.format('dsCycle: scan %s. %d checked, %d with seat problems, see %s', reason, s.checked, s.checked - s.ok, scanFile))
+end
+
+local function startScan()
+  if scan then message('dsCycle: scan already running') return end
+  if #keys == 0 then refresh() end
+  if not spot then setSpot() end
+  if not spot then return end
+  local f = io.open(scanFile, 'w')
+  if not f then message('dsCycle: unable to write ' .. scanFile) return end
+  f:write(string.format('# seat scan %s, %d configs from %s\n', os.date('%Y-%m-%d %H:%M:%S'), #keys, sourceFile or 'all configs'))
+  f:write('# key\tname\tsource\tstatus\tseat count\tseat ids\tinterior/dash/seat parts [mod]\n')
+  f:close()
+  scan = {i = 0, checked = 0, ok = 0, wait = 0, vehId = nil}
+  message(string.format('dsCycle: scanning %d configs, stay out of the way of the spawn spot', #keys))
+end
+
+local function stopScan()
+  if scan then finishScan('stopped') end
+end
+
+local function onUpdate(dtReal)
+  if not scan then return end
+  if scan.vehId then
+    -- waiting for the spawned vehicle's jbeam data
+    local vehData = core_vehicle_manager.getVehicleData(scan.vehId)
+    scan.wait = scan.wait + dtReal
+    local key = keys[scan.i]
+    local row
+    if vehData and vehData.vdata then
+      local status
+      status, row = checkSeats(key, scan.vehId)
+      if status == 'OK' then scan.ok = scan.ok + 1; row = nil end
+    elseif scan.wait > scanTimeout then
+      row = {key, '', '', 'NO_DATA', 0, '', ''}
+    else
+      return
+    end
+    scan.checked = scan.checked + 1
+    if row then
+      local f = io.open(scanFile, 'a')
+      if f then f:write(table.concat(row, '\t'), '\n'); f:close() end
+    end
+    scan.vehId = nil
+  end
+
+  scan.i = scan.i + 1
+  if scan.i > #keys then finishScan('finished') return end
+  local key = keys[scan.i]
+  if scan.i % 10 == 1 then message(string.format('dsCycle: scanning %d/%d', scan.i, #keys)) end
+  local veh = spawnKey(key, false)
+  if veh then
+    scan.vehId, scan.wait = veh:getID(), 0
+  else
+    scan.checked = scan.checked + 1
+    local f = io.open(scanFile, 'a')
+    if f then f:write(table.concat({key, '', '', 'SPAWN_FAILED', 0, '', ''}, '\t'), '\n'); f:close() end
+  end
+end
+
+M.onUpdate = onUpdate
+M.scan = startScan
+M.stopScan = stopScan
 M.current = current
 M.logCurrent = logCurrent
 M.refresh = refresh

@@ -4,5 +4,7 @@
   "dsCycleSetSpot": {"cat":"gameplay", "order":902, "ctx":"tlua", "onDown":"extensions.load('dsCycle') dsCycle.setSpot()", "title":"D-Series cycler: set spawn spot", "desc":"Spawn spot = 10 m ahead of the vehicle you're in"},
   "dsCycleCurrent": {"cat":"gameplay", "order":903, "ctx":"tlua", "onDown":"extensions.load('dsCycle') dsCycle.current()", "title":"D-Series cycler: show current config", "desc":"Show which D-Series config is spawned"},
   "dsCycleLog": {"cat":"gameplay", "order":904, "ctx":"tlua", "onDown":"extensions.load('dsCycle') dsCycle.logCurrent()", "title":"D-Series cycler: log current config to file", "desc":"Append the spawned D-Series config to dsCycle_flagged.txt"},
-  "dsCycleToggleSource": {"cat":"gameplay", "order":905, "ctx":"tlua", "onDown":"extensions.load('dsCycle') dsCycle.toggleSource()", "title":"D-Series cycler: switch flagged list / all configs", "desc":"Cycle only the configs in dsCycle_flagged.txt, or go back to all configs"}
+  "dsCycleToggleSource": {"cat":"gameplay", "order":905, "ctx":"tlua", "onDown":"extensions.load('dsCycle') dsCycle.toggleSource()", "title":"D-Series cycler: switch flagged list / all configs", "desc":"Cycle only the configs in dsCycle_flagged.txt, or go back to all configs"},
+  "dsCycleScan": {"cat":"gameplay", "order":906, "ctx":"tlua", "onDown":"extensions.load('dsCycle') dsCycle.scan()", "title":"D-Series cycler: scan seats", "desc":"Spawn every config in the active list and write seat problems to dsCycle_seats.txt"},
+  "dsCycleStopScan": {"cat":"gameplay", "order":907, "ctx":"tlua", "onDown":"extensions.load('dsCycle') dsCycle.stopScan()", "title":"D-Series cycler: stop seat scan", "desc":"Stop a running seat scan"}
 }
