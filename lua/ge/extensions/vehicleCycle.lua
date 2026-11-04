@@ -3,8 +3,10 @@
 -- Console:  extensions.load('vehicleCycle')  then
 --   vehicleCycle.useModel([model])  cycle every config of a model ('pickup', 'us_semi', or a table of
 --                                   models); no argument = the model of the vehicle you're in
+--   vehicleCycle.useMod(name)       cycle every config from one mod, on any model (part of its name will do)
 --   vehicleCycle.useFile([path])    cycle only the configs in a file (default vehicleCycle_flagged.txt)
---   vehicleCycle.useAll()           back to every config of the model(s)
+--   vehicleCycle.useAll()           back to every config of the model(s) or mod
+--   vehicleCycle.listModel([text]) / listMod([text])  print the names to use, optionally only those containing text
 --   vehicleCycle.next() / prev() / go(n) / list() / setSpot([metres]) / current() / logCurrent() / clear()
 --   vehicleCycle.scan() checks the seats of every config in the active list, stopScan() stops it
 local M = {}
@@ -17,6 +19,7 @@ local logFile = 'vehicleCycle_flagged.txt' -- in the BeamNG user folder
 local models = nil -- model keys to cycle; nil = the model of the vehicle you're in, picked on first use
 local entries, idx, vehId, spot = {}, 0, nil, nil -- entries: {model = 'pickup', key = 'd15_4wd_A'}
 local sourceFile = nil -- nil = cycle all configs of the models, otherwise cycle the configs listed in this file
+local modSource = nil -- cycle the configs from this mod (its Source name) rather than those of the models
 
 local function message(msg)
   log('I', logTag, msg)
@@ -50,6 +53,48 @@ local function modelEntries()
     for _, key in ipairs(keys) do table.insert(list, {model = model, key = key}) end
   end
   return list
+end
+
+local function allModels()
+  local keys = {}
+  for key, _ in pairs(core_vehicles.getModelList().models) do table.insert(keys, key) end
+  table.sort(keys)
+  return keys
+end
+
+local function modEntries(source)
+  local list = {}
+  for _, model in ipairs(allModels()) do
+    local keys = {}
+    for key, info in pairs(core_vehicles.getModel(model).configs or {}) do
+      if tostring(info.Source) == source then table.insert(keys, key) end
+    end
+    table.sort(keys)
+    for _, key in ipairs(keys) do table.insert(list, {model = model, key = key}) end
+  end
+  return list
+end
+
+-- every config's Source (the mod's title, or its zip name if it has none): configs and models per source
+local function modSources()
+  local sources = {}
+  for _, model in ipairs(allModels()) do
+    for _, info in pairs(core_vehicles.getModel(model).configs or {}) do
+      local source = tostring(info.Source)
+      local s = sources[source] or {count = 0, models = {}, seen = {}}
+      sources[source] = s
+      s.count = s.count + 1
+      if not s.seen[model] then
+        s.seen[model] = true
+        table.insert(s.models, model)
+      end
+    end
+  end
+  return sources
+end
+
+local function contains(s, text)
+  return not text or s:lower():find(text:lower(), 1, true) ~= nil
 end
 
 -- a config key with no model: one of the active models, else 'pickup' (old dsCycle logs were all D-Series)
@@ -105,7 +150,7 @@ end
 
 local function refresh()
   idx = 0
-  if not models then
+  if not models and not modSource then
     local model = currentModel()
     if not model then message('vehicleCycle: get in a vehicle, or pick a model with vehicleCycle.useModel(\'pickup\')') entries = {} return end
     models = {model}
@@ -123,6 +168,11 @@ local function refresh()
       return
     end
   end
+  if modSource then
+    entries = modEntries(modSource)
+    message(string.format('vehicleCycle: all %d configs from %s', #entries, modSource))
+    return
+  end
   entries = modelEntries()
   local names = {}
   for _, model in ipairs(models) do table.insert(names, modelName(model)) end
@@ -139,8 +189,54 @@ local function useModel(model)
     if not model then message('vehicleCycle: get in a vehicle to pick its model') return end
     models = {model}
   end
-  sourceFile = nil
+  sourceFile, modSource = nil, nil
   refresh()
+end
+
+-- name: the mod's name as listMod prints it, or part of it if that only matches one mod
+local function useMod(name)
+  if type(name) ~= 'string' then message('vehicleCycle: name a mod, vehicleCycle.listMod() prints them') return end
+  local matches = {}
+  for source, _ in pairs(modSources()) do
+    if source:lower() == name:lower() then matches = {source} break end
+    if contains(source, name) then table.insert(matches, source) end
+  end
+  if #matches == 0 then message('vehicleCycle: no mod with configs matches ' .. name .. ', vehicleCycle.listMod() prints them') return end
+  if #matches > 1 then
+    table.sort(matches)
+    message(string.format('vehicleCycle: %d mods match %s: %s', #matches, name, table.concat(matches, ', ')))
+    return
+  end
+  sourceFile, modSource = nil, matches[1]
+  refresh()
+end
+
+-- printed to the console, since there can be far more than fit in a message
+local function listModel(text)
+  local n = 0
+  for _, model in ipairs(allModels()) do
+    local name = modelName(model)
+    if contains(model, text) or contains(name, text) then
+      n = n + 1
+      local count = 0
+      for _, _ in pairs(core_vehicles.getModel(model).configs or {}) do count = count + 1 end
+      log('I', logTag, string.format('%-24s %4d configs  %s', model, count, name))
+    end
+  end
+  message(string.format('vehicleCycle: %d models listed in the console', n))
+end
+
+local function listMod(text)
+  local sources, names = modSources(), {}
+  for source, _ in pairs(sources) do
+    if contains(source, text) then table.insert(names, source) end
+  end
+  table.sort(names, function(a, b) return a:lower() < b:lower() end)
+  for _, source in ipairs(names) do
+    local s = sources[source]
+    log('I', logTag, string.format('%4d configs  %s  (%s)', s.count, source, table.concat(s.models, ', ')))
+  end
+  message(string.format('vehicleCycle: %d mods listed in the console', #names))
 end
 
 local function useFile(path)
@@ -338,7 +434,7 @@ local function startScan()
   if not ready() then return end
   local f = io.open(scanFile, 'w')
   if not f then message('vehicleCycle: unable to write ' .. scanFile) return end
-  f:write(string.format('# seat scan %s, %d configs from %s\n', os.date('%Y-%m-%d %H:%M:%S'), #entries, sourceFile or table.concat(models, ', ')))
+  f:write(string.format('# seat scan %s, %d configs from %s\n', os.date('%Y-%m-%d %H:%M:%S'), #entries, sourceFile or modSource or table.concat(models, ', ')))
   f:write('# model\tkey\tname\tsource\tstatus\tseat count\tseat ids\tcameras\tinterior/dash/seat parts [mod]\n')
   f:close()
   scan = {i = 0, checked = 0, ok = 0, seatless = 0, wait = 0, vehId = nil}
@@ -397,6 +493,9 @@ M.current = current
 M.logCurrent = logCurrent
 M.refresh = refresh
 M.useModel = useModel
+M.useMod = useMod
+M.listModel = listModel
+M.listMod = listMod
 M.useFile = useFile
 M.useAll = useAll
 M.toggleSource = toggleSource

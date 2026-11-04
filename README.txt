@@ -14,6 +14,17 @@ T-Series and press "cycle this model" (or vehicleCycle.useModel()) to switch. Fr
 can name one or more models: vehicleCycle.useModel('us_semi'), vehicleCycle.useModel({'pickup',
 'us_semi'}). Model keys are the vehicle folder names (pickup = D-Series, us_semi = T-Series).
 
+Which mod: vehicleCycle.useMod('gamer') cycles every config from one mod, on whichever models it
+covers. Part of the name is enough if it only matches one mod; if it matches several they're shown
+and the list stays as it was. A mod's configs are the ones the vehicle selector shows it as the
+source of, so a parts-only mod has none. 'BeamNG - Official' is vanilla, 'Custom' your own saved
+configs. useModel switches back to models.
+
+Finding the names, printed to the console (optionally only those containing some text; the first
+use can take a moment with a lot of mods):
+- vehicleCycle.listModel(['gavril']): model key, config count, name
+- vehicleCycle.listMod(['gamer']): config count, mod name, the models it covers
+
 Bindings (Options > Controls > Bindings, Gameplay, search "Vehicle cycler"):
 - cycle this model: every config of the model of the vehicle you're in
 - next config / previous config
@@ -43,7 +54,8 @@ seat you aren't listed. The file is rewritten on each scan and ends with a summa
 
 Console (GE Lua):
   extensions.load('vehicleCycle')
-  vehicleCycle.useModel([model or {models}]) / vehicleCycle.useFile([path]) / vehicleCycle.useAll()
+  vehicleCycle.useModel([model or {models}]) / vehicleCycle.useMod(name) / vehicleCycle.useFile([path])
+  vehicleCycle.useAll() / vehicleCycle.listModel([text]) / vehicleCycle.listMod([text])
   vehicleCycle.next() / vehicleCycle.prev() / vehicleCycle.go(n) / vehicleCycle.list()
   vehicleCycle.setSpot([metres]) / vehicleCycle.current() / vehicleCycle.logCurrent() / vehicleCycle.clear()
   vehicleCycle.toggleSource() / vehicleCycle.scan() / vehicleCycle.stopScan()
